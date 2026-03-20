@@ -41,6 +41,10 @@ def serve_index():
 def serve_dashboard():
     return FileResponse(os.path.join(FRONT, "dashboard.html"))
 
+@app.get("/stations")
+def serve_stations():
+    return FileResponse(os.path.join(FRONT, "stations.html"))
+
 # ── Load data at startup ───────────────────────────────────────────────────────
 _cars_df: pd.DataFrame = None
 _country_df: pd.DataFrame = None
@@ -48,12 +52,16 @@ _world_df: pd.DataFrame = None
 
 @app.on_event("startup")
 def startup():
-    global _cars_df, _country_df, _world_df
-    _cars_df    = pd.read_csv(os.path.join(CLEAN, "ev_cars.csv"))
-    _country_df = pd.read_csv(os.path.join(CLEAN, "country_summary.csv"))
-    _world_df   = pd.read_csv(os.path.join(CLEAN, "world_summary.csv"))
-    _load_stations()   # pre-build KD-Tree
-    print(f"[startup] Loaded {len(_cars_df)} vehicles")
+    global _cars_df, _country_df, _world_df, _all_stations
+    _cars_df      = pd.read_csv(os.path.join(CLEAN, "ev_cars.csv"))
+    _country_df   = pd.read_csv(os.path.join(CLEAN, "country_summary.csv"))
+    _world_df     = pd.read_csv(os.path.join(CLEAN, "world_summary.csv"))
+    _all_stations = pd.read_csv(os.path.join(CLEAN, "stations.csv"),
+                                usecols=["id","name","latitude","longitude",
+                                         "power_kw","power_class","is_fast_dc",
+                                         "ports","country_code"])
+    _load_stations()   # pre-build KD-Tree (fast-DC only)
+    print(f"[startup] Loaded {len(_cars_df)} vehicles, {len(_all_stations)} total stations")
 
 # ── Pydantic models ────────────────────────────────────────────────────────────
 class RangeRequest(BaseModel):
@@ -125,6 +133,31 @@ def stations_nearby(
     idxs = _TREE.query_ball_point([lat, lon], r=radius_deg)
     result = _STATIONS.iloc[idxs[:limit]].fillna("").to_dict(orient="records")
     return {"count": len(result), "stations": result}
+
+
+@app.get("/api/stations/bbox")
+def stations_bbox(
+    min_lat  : float = Query(...),
+    max_lat  : float = Query(...),
+    min_lon  : float = Query(...),
+    max_lon  : float = Query(...),
+    fast_only: bool  = Query(default=False),
+    limit    : int   = Query(default=2000, le=5000),
+):
+    """Return stations inside a lat/lon bounding box. Used by the global station map."""
+    df = _all_stations
+    mask = (
+        (df["latitude"]  >= min_lat) & (df["latitude"]  <= max_lat) &
+        (df["longitude"] >= min_lon) & (df["longitude"] <= max_lon)
+    )
+    if fast_only:
+        mask &= (df["is_fast_dc"] == 1)
+    subset = df[mask].head(limit).fillna("")
+    return {
+        "count"   : len(subset),
+        "capped"  : len(subset) == limit,
+        "stations": subset.to_dict(orient="records"),
+    }
 
 
 @app.post("/api/route")

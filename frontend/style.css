@@ -364,3 +364,63 @@ html, body {
   margin: 20px auto;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── BATTERY WARNING BANNERS ────────────────────────────────── */
+.battery-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  animation: slideUp .3s ease;
+  font-size: 12px;
+}
+.battery-warning.critical {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  animation: slideUp .3s ease, pulse-red 1.6s ease-in-out infinite;
+}
+.battery-warning.caution {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.bw-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+.bw-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+.battery-warning.critical .bw-title { color: var(--danger); }
+.battery-warning.caution  .bw-title { color: var(--warning); }
+.bw-msg { color: var(--text-muted); line-height: 1.4; }
+
+@keyframes pulse-red {
+  0%, 100% { border-color: rgba(248,113,113,0.4); box-shadow: none; }
+  50%       { border-color: rgba(248,113,113,0.8); box-shadow: 0 0 12px rgba(248,113,113,0.25); }
+}
+
+/* ── NO-STOP BANNER ─────────────────────────────────────────── */
+.no-stop-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  animation: slideUp .3s ease;
+}
+.no-stop-icon { font-size: 22px; flex-shrink: 0; }
+.no-stop-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+.no-stop-msg   { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+
+/* ── STOPS SECTION HEADER ───────────────────────────────────── */
+.stops-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+

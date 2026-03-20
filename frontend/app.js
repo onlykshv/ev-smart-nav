@@ -19,7 +19,8 @@ let vehicles    = [];
 let selectedVehicle = null;
 let rangeCircle = null;
 let routeLayer  = null;
-let stopMarkers = [];
+let stopMarkers = [];          // required charging stops (yellow ⚡)
+let nearbyStationMarkers = []; // all stations near route (dim blue)
 let originMarker= null;
 let destMarker  = null;
 let originLatLon= null;
@@ -35,10 +36,45 @@ function makeIcon(emoji, bg) {
 }
 
 const ICONS = {
-  origin : makeIcon('📍', '#4ade80'),
-  dest   : makeIcon('🏁', '#f87171'),
-  stop   : makeIcon('⚡', '#fbbf24'),
+  origin  : makeIcon('📍', '#4ade80'),
+  dest    : makeIcon('🏁', '#f87171'),
+  stop    : makeIcon('⚡', '#fbbf24'),          // required charging stop
+  nearby  : makeIcon('🔌', 'rgba(96,165,250,0.4)'), // station on route (informational)
 };
+
+// ── Battery warning ───────────────────────────────────────────────────────────
+function showBatteryWarning(pct) {
+  let el = document.getElementById('batteryWarning');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'batteryWarning';
+    // Insert just after the range card
+    const rangeCard = document.getElementById('rangeCard');
+    rangeCard.parentNode.insertBefore(el, rangeCard.nextSibling);
+  }
+
+  pct = parseInt(pct);
+  if (pct <= 10) {
+    el.className = 'battery-warning critical';
+    el.innerHTML = `
+      <span class="bw-icon">🚨</span>
+      <div>
+        <div class="bw-title">Critical Battery!</div>
+        <div class="bw-msg">Charge immediately — risk of running out before reaching a station.</div>
+      </div>`;
+  } else if (pct <= 20) {
+    el.className = 'battery-warning caution';
+    el.innerHTML = `
+      <span class="bw-icon">⚠️</span>
+      <div>
+        <div class="bw-title">Battery Low</div>
+        <div class="bw-msg">Find a charging station soon to avoid range anxiety.</div>
+      </div>`;
+  } else {
+    el.className = '';
+    el.innerHTML = '';
+  }
+}
 
 // ── On load ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -106,6 +142,7 @@ function bindUI() {
     const pct = slider.value;
     chargeVal.textContent = `${pct}%`;
     slider.style.setProperty('--progress', `${pct}%`);
+    showBatteryWarning(pct);
     if (selectedVehicle) fetchAndShowRange();
   });
 
@@ -250,29 +287,58 @@ function clearRoute() {
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
   stopMarkers.forEach(m => map.removeLayer(m));
   stopMarkers = [];
+  nearbyStationMarkers.forEach(m => map.removeLayer(m));
+  nearbyStationMarkers = [];
   document.getElementById('tripSummary').style.display = 'none';
 }
 
-function drawRoute(data) {
-  // Draw polyline from GeoJSON geometry
-  if (data.geometry) {
-    const coords = data.geometry.coordinates.map(c => [c[1], c[0]]);
-    routeLayer = L.polyline(coords, {
-      color  : '#60a5fa',
-      weight : 4,
-      opacity: 0.85,
-    }).addTo(map);
-    map.fitBounds(routeLayer.getBounds(), { padding: [40, 340] });
-  }
+async function drawRoute(data) {
+  if (!data.geometry) return;
 
-  // Draw charging stops
-  (data.stops || []).forEach((stop, i) => {
-    const m = L.marker([stop.latitude, stop.longitude], { icon: ICONS.stop })
+  // Draw route polyline
+  const coords = data.geometry.coordinates.map(c => [c[1], c[0]]);
+  routeLayer = L.polyline(coords, {
+    color  : '#60a5fa',
+    weight : 4,
+    opacity: 0.85,
+  }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [40, 340] });
+
+  // ── Show ALL stations near the route (informational dim markers) ──────────────
+  // Use route midpoint as the search centre; radius covers ~half the route.
+  const midIdx = Math.floor(coords.length / 2);
+  const [midLat, midLon] = coords[midIdx];
+  const radiusKm = Math.min((data.total_distance_km || 200) / 2, 150);
+
+  try {
+    const res = await fetch(`${API}/api/stations/nearby?lat=${midLat}&lon=${midLon}&radius_km=${radiusKm}&limit=80`);
+    const nearby = await res.json();
+    const requiredIds = new Set((data.stops || []).map(s => s.station_id));
+
+    (nearby.stations || []).forEach(st => {
+      if (requiredIds.has(st.id)) return; // skip — will be drawn as required stop below
+      const m = L.marker([st.latitude, st.longitude], { icon: ICONS.nearby })
+        .bindPopup(`
+          <div class="popup-title" style="color:var(--accent2)">🔌 ${st.name || 'Charging Station'}</div>
+          <div class="popup-row">⚡ Power: <b>${st.power_kw} kW</b></div>
+          <div class="popup-row">🔌 Ports: ${st.ports}</div>
+          <div class="popup-row">Type: ${st.power_class}</div>
+          <div class="popup-row" style="color:var(--text-muted);margin-top:4px;font-size:10px">Nearby station — not a required stop</div>
+        `)
+        .addTo(map);
+      nearbyStationMarkers.push(m);
+    });
+  } catch (e) { console.warn('Could not load nearby stations', e); }
+
+  // ── Draw required charging stops (yellow ⚡, on top) ──────────────────────────
+  (data.stops || []).forEach((stop) => {
+    const m = L.marker([stop.latitude, stop.longitude], { icon: ICONS.stop, zIndexOffset: 100 })
       .bindPopup(`
-        <div class="popup-title">⚡ ${stop.name}</div>
+        <div class="popup-title">⚡ Required Stop — ${stop.name}</div>
         <div class="popup-row">🔋 Power: <b>${stop.power_kw} kW</b></div>
         <div class="popup-row">🔌 Ports: ${stop.ports}</div>
         <div class="popup-row">Type: ${stop.power_class}</div>
+        <div class="popup-row" style="color:var(--warning);margin-top:4px;font-size:10px">🚨 You need to charge here</div>
       `)
       .addTo(map);
     stopMarkers.push(m);
@@ -283,24 +349,37 @@ function showTripSummary(data) {
   const panel = document.getElementById('tripSummary');
   panel.style.display = 'block';
 
+  const numStops = (data.stops || []).length;
   document.getElementById('sTotalDist').textContent = data.total_distance_km ? `${data.total_distance_km} km` : '—';
   document.getElementById('sTotalDur').textContent  = data.duration_min      ? `${Math.round(data.duration_min)} min` : '—';
-  document.getElementById('sStops').textContent     = (data.stops || []).length;
+  document.getElementById('sStops').textContent     = numStops;
   document.getElementById('sVehicle').textContent   = data.vehicle || '—';
 
   const stopsList = document.getElementById('stopsList');
-  stopsList.innerHTML = (data.stops || []).map((s, i) => `
-    <div class="stop-item">
-      <div class="stop-num">${i + 1}</div>
-      <div class="stop-info">
-        <div class="stop-name">${s.name}</div>
-        <div class="stop-meta">${s.power_kw} kW · ${s.ports} ports</div>
-      </div>
-      <div class="power-badge ${s.power_class}">${s.power_class.replace('_', ' ')}</div>
-    </div>
-  `).join('');
 
-  if (!data.stops?.length) {
-    stopsList.innerHTML = '<div style="color:var(--accent);font-size:12px;text-align:center;padding:8px">✅ No charging stop needed!</div>';
+  if (!numStops) {
+    // ✅ Range is sufficient — no stop needed
+    stopsList.innerHTML = `
+      <div class="no-stop-banner">
+        <div class="no-stop-icon">✅</div>
+        <div>
+          <div class="no-stop-title">No Charging Stop Needed</div>
+          <div class="no-stop-msg">Your vehicle has enough range to complete this trip. Nearby stations are shown on the map for reference.</div>
+        </div>
+      </div>`;
+  } else {
+    // ⚡ Required charging stops list
+    stopsList.innerHTML = `
+      <div class="stops-header">Required Charging Stops</div>` +
+      data.stops.map((s, i) => `
+        <div class="stop-item">
+          <div class="stop-num">${i + 1}</div>
+          <div class="stop-info">
+            <div class="stop-name">${s.name}</div>
+            <div class="stop-meta">${s.power_kw} kW · ${s.ports} ports</div>
+          </div>
+          <div class="power-badge ${s.power_class}">${s.power_class.replace(/_/g, ' ')}</div>
+        </div>`
+      ).join('');
   }
 }
