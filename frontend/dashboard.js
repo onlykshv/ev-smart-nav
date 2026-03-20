@@ -4,27 +4,6 @@
 
 const API = '';
 
-// ── Country code → centroids (subset for map circles) ─────────────────────────
-// We'll use Nominatim to avoid bundling a full GeoJSON
-const COUNTRY_CENTROIDS = {
-  US:[-98.583,39.833], CN:[104.195,35.861], DE:[10.451,51.165], NL:[5.291,52.133],
-  FR:[2.213,46.228], GB:[-3.436,55.378], NO:[8.468,60.472], KR:[127.766,35.908],
-  AU:[133.775,-25.274], CA:[-96.821,56.130], JP:[138.252,36.204], BE:[4.469,50.503],
-  SE:[18.643,60.128], IT:[12.567,41.872], AT:[14.550,47.516], CH:[8.228,46.818],
-  DK:[9.502,56.263], FI:[25.748,61.924], ES:[-3.749,40.463], PL:[19.145,51.920],
-  NZ:[172.013,-40.900], PT:[-8.224,39.400], CZ:[15.473,49.818], HU:[19.503,47.163],
-  RO:[24.967,45.944], LU:[6.130,49.816], SK:[19.699,48.669], SI:[14.996,46.152],
-  HR:[15.200,45.100], BG:[25.485,42.734], LT:[23.881,55.170], LV:[24.603,56.880],
-  EE:[25.013,58.596], GR:[21.824,39.074], CY:[33.429,35.127], MT:[14.376,35.937],
-  IE:[-8.244,53.413], RS:[21.005,44.017], MK:[21.745,41.608], AL:[20.169,41.154],
-  BA:[17.679,43.916], ME:[19.374,42.708], XK:[20.903,42.602], IS:[-18.998,64.963],
-  ZA:[25.084,-29.001], IN:[78.963,20.594], BR:[-51.926,-14.235], MX:[-102.552,23.634],
-  CL:[-71.543,-35.675], AR:[-63.617,-38.416], CO:[-74.180,4.571], PE:[-75.016,-9.190],
-  TH:[100.993,15.870], MY:[109.698,4.210], SG:[103.820,1.357], NL_:[5,52.3],
-  SA:[45.079,23.886], AE:[53.848,23.424], QA:[51.183,25.354], TR:[35.243,38.963],
-  IL:[34.852,31.046], ZA_:[25,-29],
-};
-
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -59,52 +38,127 @@ function renderKPIs(countries) {
   document.getElementById('globalFastShare').textContent= `${(avgFast * 100).toFixed(1)}%`;
 }
 
-// ── Choropleth Map ────────────────────────────────────────────────────────────
-function renderChoropleth(countries) {
-  const chorMap = L.map('choroplethMap', { zoomControl: true }).setView([30, 10], 2);
+// ── Choropleth Map — filled country polygons ──────────────────────────────────
+async function renderChoropleth(countries) {
+  const chorMap = L.map('choroplethMap', { zoomControl: true, scrollWheelZoom: true })
+    .setView([25, 15], 2);
+
+  // Dark base tiles without labels so country fills show clearly
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 18,
-    attribution: '© CARTO © OSM'
+    subdomains: 'abcd', maxZoom: 18, attribution: '© CARTO © OSM'
   }).addTo(chorMap);
 
-  // Build lookup by country code
+  // Label overlay on top (so country names appear above our fill)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 18, opacity: 0.7, zIndex: 500
+  }).addTo(chorMap);
+
+  // ── Build data lookup: ISO-A2 → row ────────────────────────────────────────
   const lookup = {};
   const getCount = r => +(r.station_count || r.evse_count || 0);
-  countries.forEach(r => { const k = r.country_code || r.country; if (k) lookup[k] = r; });
-  const max = Math.max(...countries.map(getCount));
-  const scale = chroma.scale(['#1a2d2a', '#4ade80']).mode('lab');
-
-  // Draw circles on centroid positions
-  Object.entries(COUNTRY_CENTROIDS).forEach(([cc, [lon, lat]]) => {
-    const row = lookup[cc];
-    if (!row) return;
-    const cnt  = getCount(row);
-    const frac = cnt / max;
-    const col  = scale(frac).hex();
-    const r    = 8 + frac * 40;
-    L.circleMarker([lat, lon], {
-      radius     : r,
-      fillColor  : col,
-      color      : col,
-      fillOpacity: 0.7,
-      weight     : 0,
-    })
-    .bindPopup(`
-      <b>${row.country || cc}</b><br>
-      Stations: ${cnt.toLocaleString()}<br>
-      Fast share: ${((+(row.fast_evse_share || 0)) * 100).toFixed(1)}%
-    `)
-    .addTo(chorMap);
+  countries.forEach(r => {
+    const k = (r.country_code || r.country || '').toUpperCase();
+    if (k) lookup[k] = r;
   });
 
-  // Legend
-  const steps = [0, 0.25, 0.5, 0.75, 1];
+  // Use log scale so small countries with few stations are still visible
+  const maxCount = Math.max(...countries.map(getCount));
+  const logMax   = Math.log1p(maxCount);
+
+  const scale = chroma.scale([
+    '#0d1f1a',   // near-zero: almost invisible dark
+    '#134e3a',   // low
+    '#16a34a',   // medium
+    '#4ade80',   // high
+    '#bbf7d0',   // very dense (US, China, Europe leaders)
+  ]).mode('lab');
+
+  function getColor(count) {
+    if (!count) return '#111820';
+    return scale(Math.log1p(count) / logMax).hex();
+  }
+
+  function featureStyle(feature) {
+    const iso2 = (feature.properties.ISO_A2 || feature.properties.iso_a2 || '').toUpperCase();
+    const row  = lookup[iso2];
+    const cnt  = row ? getCount(row) : 0;
+    return {
+      fillColor  : getColor(cnt),
+      fillOpacity: cnt ? 0.82 : 0.15,
+      color      : 'rgba(255,255,255,0.08)',   // very subtle border
+      weight     : 0.5,
+    };
+  }
+
+  let geojsonLayer;
+
+  function onEachFeature(feature, layer) {
+    const iso2 = (feature.properties.ISO_A2 || feature.properties.iso_a2 || '').toUpperCase();
+    const name = feature.properties.ADMIN || feature.properties.name || iso2;
+    const row  = lookup[iso2];
+    const cnt  = row ? getCount(row) : 0;
+    const ports = row ? +(row.evse_count || row.port_count || 0) : 0;
+    const fast  = row ? ((+(row.fast_evse_share || 0)) * 100).toFixed(1) : '—';
+
+    layer.bindTooltip(`
+      <div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.6">
+        <b style="font-size:13px">${name}</b><br>
+        🔌 Stations: <b>${cnt.toLocaleString()}</b><br>
+        ⚡ Ports: <b>${ports.toLocaleString()}</b><br>
+        🚀 Fast DC share: <b>${fast}%</b>
+      </div>`, { sticky: true, className: 'choropleth-tooltip' });
+
+    layer.on({
+      mouseover(e) {
+        const l = e.target;
+        l.setStyle({ fillOpacity: cnt ? 0.97 : 0.25, weight: 1.5, color: 'rgba(255,255,255,0.35)' });
+        l.bringToFront();
+      },
+      mouseout(e) {
+        if (geojsonLayer) geojsonLayer.resetStyle(e.target);
+      },
+      click(e) {
+        if (cnt) chorMap.fitBounds(e.target.getBounds(), { padding: [30, 30] });
+      }
+    });
+  }
+
+  // ── Fetch world GeoJSON ───────────────
+  try {
+    const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json');
+    const topo = await res.json();
+
+    // Convert TopoJSON → GeoJSON using topojson-client (must be loaded in HTML)
+    const geojson = topojson.feature(topo, topo.objects.countries);
+
+    // world-atlas only has numeric ISO codes; we'll match via a small crosswalk JSON
+    const cwRes  = await fetch('https://cdn.jsdelivr.net/gh/lukes/ISO-3166-Countries-with-Regional-Codes@master/all/all.json');
+    const cwData = await cwRes.json();
+    const numToIso2 = {};
+    cwData.forEach(d => { if (d['country-code'] && d['alpha-2']) numToIso2[d['country-code']] = d['alpha-2']; });
+
+    // Attach ISO_A2 to each feature
+    geojson.features.forEach(f => {
+      const num = String(f.id).padStart(3, '0');
+      f.properties.ISO_A2 = numToIso2[num] || '';
+    });
+
+    geojsonLayer = L.geoJSON(geojson, { style: featureStyle, onEachFeature }).addTo(chorMap);
+  } catch (err) {
+    console.warn('GeoJSON load failed, falling back to simple map', err);
+  }
+
+  // ── Gradient legend bar ───────────────────────────────────────────────────────
   const leg = document.getElementById('mapLegend');
-  leg.innerHTML = steps.map(s => {
-    const col = scale(s).hex();
-    const lab = s === 0 ? 'Few' : s === 1 ? 'Most' : '';
-    return `<div class="legend-item"><div class="legend-swatch" style="background:${col}"></div> ${lab}</div>`;
-  }).join('');
+  const stops = [0, 0.25, 0.5, 0.75, 1].map(s => scale(s).hex());
+  const grad  = `linear-gradient(to right, ${stops.join(', ')})`;
+  leg.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;width:100%">
+      <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">0</span>
+      <div style="flex:1;height:10px;border-radius:5px;background:${grad}"></div>
+      <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${maxCount.toLocaleString()} stations</span>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:center">Hover over a country for details · Click to zoom in</div>`;
 }
 
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
