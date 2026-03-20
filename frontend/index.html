@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EV Smart Navigator — Route Planner</title>
+  <meta name="description" content="Plan your EV journey with smart charging stop recommendations and real-time range prediction."/>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Geocoder (Nominatim) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+<!-- ── NAV ───────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="nav-icon">⚡</span>
+    <span>EV Smart Navigator</span>
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link active">🗺️ Route Planner</a>
+    <a href="/dashboard" class="nav-link">📊 Stats Dashboard</a>
+  </div>
+</nav>
+
+<!-- ── MAIN LAYOUT ────────────────────────────────────────────── -->
+<div class="app-layout">
+
+  <!-- LEFT PANEL -->
+  <aside class="side-panel" id="sidePanel">
+    <h2 class="panel-title">Plan Your Trip</h2>
+
+    <!-- EV Selector -->
+    <div class="form-section">
+      <label class="form-label">🚗 Select Vehicle</label>
+      <select id="brandSelect" class="form-select">
+        <option value="">Loading brands…</option>
+      </select>
+      <select id="vehicleSelect" class="form-select" style="margin-top:8px" disabled>
+        <option value="">Select brand first</option>
+      </select>
+    </div>
+
+    <!-- Charge Slider -->
+    <div class="form-section">
+      <label class="form-label">🔋 Current Charge: <span id="chargeVal" class="highlight-val">80%</span></label>
+      <input type="range" id="chargeSlider" class="charge-slider" min="5" max="100" value="80"/>
+      <div class="slider-track-labels"><span>5%</span><span>100%</span></div>
+    </div>
+
+    <!-- Range Display -->
+    <div class="range-card" id="rangeCard" style="display:none">
+      <div class="range-label">Predicted Range</div>
+      <div class="range-value" id="rangeDisplay">— km</div>
+      <div class="range-method" id="rangeMethod"></div>
+    </div>
+
+    <!-- Route Inputs -->
+    <div class="form-section">
+      <label class="form-label">📍 Origin</label>
+      <div class="search-row">
+        <input type="text" id="originInput" class="form-input" placeholder="e.g. London, UK"/>
+        <button class="icon-btn" id="originGeoBtn" title="Use my location">📌</button>
+      </div>
+      <label class="form-label" style="margin-top:10px">🏁 Destination</label>
+      <input type="text" id="destInput" class="form-input" placeholder="e.g. Paris, France"/>
+    </div>
+
+    <button class="btn-primary" id="planRouteBtn" disabled>Plan Route ➜</button>
+
+    <!-- Trip Summary -->
+    <div class="trip-summary" id="tripSummary" style="display:none">
+      <h3 class="summary-title">Trip Summary</h3>
+      <div class="summary-grid">
+        <div class="summary-item"><span class="s-label">Distance</span><span class="s-val" id="sTotalDist">—</span></div>
+        <div class="summary-item"><span class="s-label">Duration</span><span class="s-val" id="sTotalDur">—</span></div>
+        <div class="summary-item"><span class="s-label">Stops</span><span class="s-val" id="sStops">—</span></div>
+        <div class="summary-item"><span class="s-label">Vehicle</span><span class="s-val" id="sVehicle">—</span></div>
+      </div>
+      <div id="stopsList" class="stops-list"></div>
+    </div>
+  </aside>
+
+  <!-- MAP -->
+  <div id="map"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environments ──────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Data files (too large for GitHub) ────────────────────────
+RAWS/
+data/clean/
+
+# ── Trained model (binary, regenerate with train_range_model.py)
+models/range_predictor.pkl
+
+# ── IDE / OS ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Env secrets ───────────────────────────────────────────────
+.env
+*.env

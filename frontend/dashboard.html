@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EV Smart Navigator — Global Dashboard</title>
+  <meta name="description" content="Global EV charging infrastructure statistics — country heatmap, port counts, and fast-DC share."/>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- chroma.js for choropleth colours -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <span class="nav-icon">⚡</span>
+    <span>EV Smart Navigator</span>
+  </div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">🗺️ Route Planner</a>
+    <a href="/dashboard" class="nav-link active">📊 Stats Dashboard</a>
+  </div>
+</nav>
+
+<div class="dashboard-layout">
+
+  <!-- HEADER STATS -->
+  <div class="stats-header">
+    <div class="stat-card">
+      <div class="stat-icon">🌍</div>
+      <div class="stat-info">
+        <div class="stat-value" id="totalCountries">—</div>
+        <div class="stat-label">Countries Covered</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-info">
+        <div class="stat-value" id="totalStations">—</div>
+        <div class="stat-label">Total Stations</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🔌</div>
+      <div class="stat-info">
+        <div class="stat-value" id="totalPorts">—</div>
+        <div class="stat-label">Total Ports</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🚀</div>
+      <div class="stat-info">
+        <div class="stat-value" id="globalFastShare">—</div>
+        <div class="stat-label">Fast-DC Share</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHOROPLETH MAP -->
+  <div class="dash-section">
+    <h2 class="section-title">🌐 Global Charging Station Density</h2>
+    <div id="choroplethMap" class="choropleth-map"></div>
+    <div class="map-legend" id="mapLegend"></div>
+  </div>
+
+  <!-- CHARTS ROW -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3 class="chart-title">Top 20 Countries by Charging Ports</h3>
+      <canvas id="barChart"></canvas>
+    </div>
+    <div class="chart-card chart-card--small">
+      <h3 class="chart-title">Fast DC vs AC Share (Global)</h3>
+      <canvas id="donutChart"></canvas>
+      <div class="donut-legend" id="donutLegend"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
