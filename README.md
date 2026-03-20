@@ -2,7 +2,7 @@
 
 A full-stack smart EV navigation and range prediction system built with Python (FastAPI), Leaflet.js, and scikit-learn.
 
-![Route Planner](https://raw.githubusercontent.com/your-username/ev-smart-nav/main/docs/screenshot.png)
+![Route Planner](https://raw.githubusercontent.com/onlykshv/ev-smart-nav/main/docs/screenshot.png)
 
 ## Features
 
